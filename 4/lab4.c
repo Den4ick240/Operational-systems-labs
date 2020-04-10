@@ -39,6 +39,10 @@ int main() {
         }
 
         buffNode->str = strdup(inputBuffer);
+        if (buffNode->str == NULL) {
+        	free(buffNode);
+        	break;
+		}
         buffNode->next = head;
         head = buffNode;
     }
@@ -48,7 +52,7 @@ int main() {
 }
 
 void printAndDestroyList(struct StringListNode *head) {
-	struct StringListNode *buffNode;
+    struct StringListNode *buffNode;
     while (head != NULL) {
         printf("%s", head->str);
         buffNode = head;
