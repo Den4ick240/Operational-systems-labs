@@ -4,7 +4,9 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#define WAIT_TIME 5
 #define SIZE 1024
+#define BUFF_SIZE 32
 
 int buildFileStringTable(int *endls, int fd) {
 	int n = 1, i = 1;
@@ -56,8 +58,35 @@ int scanNumber(int n) {
 	return id;
 }
 
+int waitAndRead(int n) {
+	int fd, flags, id;
+	char line[BUFF_SIZE];
+	if ((fd = open("/dev/tty", O_RDONLY | O_NDELAY)) == -1) {
+		perror("/dev/tty");
+		return 0;
+	}
+	printf("Enter a string number from 1 to %d within %d seconds\n", 
+		n-1, WAIT_TIME);
+	sleep(WAIT_TIME);
+	if (read(fd, line, BUFF_SIZE) == 0) {
+		id = 0;
+	}
+	else {
+		//flags = fcntl(fd, F_GETFL);
+		//flags &= ~O_NDELAY;
+		//fcntl(fd, F_SETFL, flags);
+		close(fd);
+		id = atoi(line);
+	}
+	if (id <= 0) {
+		printf("\nSorry\n");
+		return 0;
+	}
+	return id;
+}
+
 int main(int argc, char **argv) {
-	int fd;
+	int fd, terminalDescriptor;
 	int endls[SIZE];
 	int n, i;
 	
@@ -77,8 +106,14 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 	
+	int id = waitAndRead(n);
+	if (id == 0) {
+		return 0;
+	}
+	printString(endls, id, fd);
+	
 	while (1) {
-		int id = scanNumber(n);
+		id = scanNumber(n);
 		if (id == 0) {
 			continue;
 		}
