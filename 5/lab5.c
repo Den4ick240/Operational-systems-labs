@@ -84,5 +84,6 @@ int main(int argc, char **argv) {
 		}
 		printString(endls, id, fd);
 	}
+	close(fd);
 	return 0;
 }

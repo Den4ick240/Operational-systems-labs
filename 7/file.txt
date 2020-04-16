@@ -1,0 +1,6 @@
+that's the first line of this example file
+second line
+next line will be empty
+
+two more lines
+that's the last one

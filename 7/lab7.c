@@ -3,43 +3,39 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/mman.h>
 
 #define WAIT_TIME 5
 #define SIZE 1024
 #define BUFF_SIZE 32
 
-int buildFileStringTable(int *endls, int fd) {
-	int n = 1, i = 1;
-	char buff;
+int buildFileStringTable(int *endls, char *fileMap, int fileSize) {
+	int n = 1, i;
 	endls[0] = 0;
-	while (read(fd, &buff, sizeof(char) > 0 && n < SIZE)) {
-		if (buff == '\n') {
-			endls[n++] = i;
+	for (i = 0; i < fileSize && n < SIZE; i++) {
+		if (fileMap[i] == '\n') {
+			endls[n++] = i + 1;
 		}
-		i++;
 	}
-	if (i - 1 != endls[n - 1]) {
+	if (i != endls[n - 1]) {
 		endls[n++] = i;
 	}
 	printf("File contains %d %s\n", n - 1, (n == 2 ? "line" : "lines"));
 	return n;
 }
 
-void printString(int *endls, int id, int fd) {
+void printString(int *endls, int id, char *fileMap) {
 	char *strBuff = NULL;
-	int size = endls[id] - endls[id - 1];
+	int size = endls[id] - endls[id - 1] - 1;
+	int i;
 	
 	strBuff =  (char *)malloc(sizeof(char) * (size));
 	if (strBuff == NULL) {
 		perror(strerror(errno));
 		return;
 	}
-	lseek(fd, endls[id - 1], SEEK_SET);
-	read(fd, strBuff, sizeof(char) * (size - 1));
-	strBuff[size - 1] = 0;
-	printf("%s\n", strBuff);
-	free(strBuff);
-		
+	fwrite(fileMap + sizeof(char) * endls[id - 1], sizeof(char), (size), stdout);
+	printf("\n");	
 }
 
 int scanNumber(int n) {
@@ -68,11 +64,11 @@ int waitAndRead(int n) {
 	printf("Enter a string number from 1 to %d within %d seconds\n", 
 		n-1, WAIT_TIME);
 	sleep(WAIT_TIME);
+	
 	if (read(fd, line, BUFF_SIZE) == 0) {
 		id = 0;
 	}
 	else {
-		
 		id = atoi(line);
 	}
 	
@@ -85,9 +81,11 @@ int waitAndRead(int n) {
 }
 
 int main(int argc, char **argv) {
-	int fd, terminalDescriptor;
+	int fd;
 	int endls[SIZE];
 	int n, i;
+	char * fileMap = NULL;
+	int fileSize;
 	
 	if (argc < 2) {
 		printf("Enter a file name as an argument\n");
@@ -99,7 +97,14 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 	
-	n = buildFileStringTable(endls, fd);
+	fileSize = lseek(fd, 0, SEEK_END);
+	fileMap = (char*) mmap(0, fileSize, PROT_READ, MAP_SHARED, fd, 0);
+	if (fileMap == NULL) {
+		perror(strerror(errno));
+		exit(1);
+	}
+	
+	n = buildFileStringTable(endls, fileMap, fileSize);
 	
 	if (n == 0) {
 		return 0;
@@ -109,14 +114,14 @@ int main(int argc, char **argv) {
 	if (id == 0) {
 		return 0;
 	}
-	printString(endls, id, fd);
+	printString(endls, id, fileMap);
 	
 	while (1) {
 		id = scanNumber(n);
 		if (id == 0) {
 			continue;
 		}
-		printString(endls, id, fd);
+		printString(endls, id, fileMap);
 	}
 	close(fd);
 	return 0;
