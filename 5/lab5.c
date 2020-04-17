@@ -84,6 +84,10 @@ int main(int argc, char **argv) {
 		}
 		printString(endls, id, fd);
 	}
-	close(fd);
+	
+	if (close(fd) == -1) {
+		perror(strerror(errno));
+		exit(1);
+	}
 	return 0;
 }

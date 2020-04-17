@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
 	int endls[SIZE];
 	int n, i;
 	char * fileMap = NULL;
-	int fileSize;
+	off_t fileSize;
 	
 	if (argc < 2) {
 		printf("Enter a file name as an argument\n");
@@ -123,6 +123,9 @@ int main(int argc, char **argv) {
 		}
 		printString(endls, id, fileMap);
 	}
-	close(fd);
+	if (close(fd) == -1) {
+		perror(strerror(errno));
+		exit(1);
+	}
 	return 0;
 }
