@@ -3,129 +3,133 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <poll.h>
+#include <unistd.h>
 #include <sys/mman.h>
 
-#define WAIT_TIME 5
-#define SIZE 1024
-#define BUFF_SIZE 32
+#define MAX_NUMBER_OF_LINES 1024
+#define TIMEOUT 5000
 
-int buildFileStringTable(int *endls, char *fileMap, int fileSize) {
-	int n = 1, i;
-	endls[0] = 0;
-	for (i = 0; i < fileSize && n < SIZE; i++) {
-		if (fileMap[i] == '\n') {
-			endls[n++] = i + 1;
-		}
-	}
-	if (i != endls[n - 1]) {
-		endls[n++] = i;
-	}
-	printf("File contains %d %s\n", n - 1, (n == 2 ? "line" : "lines"));
-	return n;
-}
+int buildLinesTable(char* fileMap, off_t fileMapSize, int *lineOffsets);
+void printLine(char *fileMap, off_t fileMapSize, int *lineOffsets, int lineNumber);
+int readNumber(int numberOfLines);
+int readNumberWithTimeLimit(int numberOfLines);
 
-void printString(int *endls, int id, char *fileMap) {
-	char *strBuff = NULL;
-	int size = endls[id] - endls[id - 1] - 1;
-	int i;
-	
-	strBuff =  (char *)malloc(sizeof(char) * (size));
-	if (strBuff == NULL) {
-		perror(strerror(errno));
-		return;
-	}
-	fwrite(fileMap + sizeof(char) * endls[id - 1], sizeof(char), (size), stdout);
-	printf("\n");	
-}
-
-int scanNumber(int n) {
-	int id, scanfResult = 0;
-	scanfResult = scanf("%d", &id);
-
-	if (scanfResult == 0 || id <= 0) {
-		printf("Enter a number from 1 to %d\n", n - 1);
-		while (scanfResult == 0 && getc(stdin) != '\n');
-		return 0;
-	}
-	if (id >= n) {
-		printf("Entered number is too big\n");
-		return 0;
-	}
-	return id;
-}
-
-int waitAndRead(int n) {
-	int fd, flags, id;
-	char line[BUFF_SIZE];
-	if ((fd = open("/dev/tty", O_RDONLY | O_NDELAY)) == -1) {
-		perror("/dev/tty");
-		return 0;
-	}
-	printf("Enter a string number from 1 to %d within %d seconds\n", 
-		n-1, WAIT_TIME);
-	sleep(WAIT_TIME);
-	
-	if (read(fd, line, BUFF_SIZE) == 0) {
-		id = 0;
-	}
-	else {
-		id = atoi(line);
-	}
-	
-	close(fd);
-	if (id <= 0) {
-		printf("\nSorry\n");
-		return 0;
-	}
-	return id;
-}
-
-int main(int argc, char **argv) {
-	int fd;
-	int endls[SIZE];
-	int n, i;
-	char * fileMap = NULL;
-	off_t fileSize;
+int main (int argc, char **argv) {
+	int fileDescriptor;
+	char *fileMap = NULL;
+	off_t fileMapSize;
+	int lineOffsets[MAX_NUMBER_OF_LINES + 1];
+	int numberOfLines, i = 0;
 	
 	if (argc < 2) {
-		printf("Enter a file name as an argument\n");
+		printf("usage: %s file_name\n", argv[0]);
 		exit(0);
 	}
-
-	if ((fd = open(argv[1], O_RDONLY)) == -1) {
+	
+	fileDescriptor = open(argv[1], O_RDONLY);
+	if (fileDescriptor == -1) {
+		printf("Couldn't open file");
 		perror(strerror(errno));
 		exit(1);
 	}
 	
-	fileSize = lseek(fd, 0, SEEK_END);
-	fileMap = (char*) mmap(0, fileSize, PROT_READ, MAP_SHARED, fd, 0);
+	fileMapSize = lseek(fileDescriptor, 0, SEEK_END);
+	fileMap = (char*) mmap(0, fileMapSize, PROT_READ, MAP_SHARED, fileDescriptor, 0);
 	if (fileMap == NULL) {
 		perror(strerror(errno));
 		exit(1);
 	}
 	
-	n = buildFileStringTable(endls, fileMap, fileSize);
-	
-	if (n == 0) {
-		return 0;
+	numberOfLines = buildLinesTable(fileMap, fileMapSize, lineOffsets);
+
+	if ((i = readNumberWithTimeLimit(numberOfLines)) < 1) {
+		return 0; 
 	}
+	printLine(fileMap, fileMapSize, lineOffsets, i);
 	
-	int id = waitAndRead(n);
-	if (id == 0) {
-		return 0;
-	}
-	printString(endls, id, fileMap);
-	
-	while (1) {
-		id = scanNumber(n);
-		if (id == 0) {
+	while ((i = readNumber(numberOfLines)) != 0) {
+		if (i == -1) {
 			continue;
 		}
-		printString(endls, id, fileMap);
+		printLine(fileMap, fileMapSize, lineOffsets, i);
 	}
-	if (close(fd) == -1) {
+}
+
+int buildLinesTable(char* fileMap, off_t fileMapSize, int *lineOffsets) {
+	int i, numberOfLines;
+	
+	numberOfLines = 0;
+	i = 0;
+	
+	lineOffsets[0] = -1;
+	
+	while (1) {
+		if (i == fileMapSize || numberOfLines >= MAX_NUMBER_OF_LINES) {
+			break;
+		}
+		if (fileMap[i] == '\n') {
+			numberOfLines++; 
+			lineOffsets[numberOfLines] = i;
+		}				
+		i++;
+	}
+	if (lineOffsets[numberOfLines] != i - 1 && numberOfLines < MAX_NUMBER_OF_LINES) {
+		numberOfLines++; 
+		lineOffsets[numberOfLines] = i;
+	}
+	printf("File contains %d line%s\n", numberOfLines, numberOfLines == 1 ? "" : "s");
+	return numberOfLines;
+}
+
+void printLine(char* fileMap, off_t fileMapSize, int *lineOffsets, int lineNumber) {
+	int lineSize = lineOffsets[lineNumber] - lineOffsets[lineNumber - 1];
+	int lineStart = 1 + lineOffsets[lineNumber - 1];
+	
+	write(STDOUT_FILENO, fileMap + lineStart, sizeof(char) * lineSize);
+	printf("\n");
+}
+
+int readNumber(int numberOfLines) {
+	int scanfResult;
+	int enteredNumber;
+	
+	do {
+		scanfResult = scanf("%d", &enteredNumber);
+	} while (scanfResult == EOF && errno == EINTR);
+	
+	if (scanfResult == EOF) {
+		printf("Error: couldn't read from input stream\n");
 		perror(strerror(errno));
-		exit(1);
+		return -1;
 	}
-	return 0;
+	
+	if (scanfResult == 0 || enteredNumber < 0 || numberOfLines < enteredNumber) {
+		printf("Bad input, enter a number from 1 to %d, or enter 0 to exit\n", numberOfLines);
+		while (scanfResult == 0 && getc(stdin) != '\n');
+		return -1;
+	}
+	return enteredNumber;
+}
+
+int readNumberWithTimeLimit(int numberOfLines) {
+	int pollRet;
+	struct pollfd fds;
+	do {
+		printf("Enter a line number within %lf seconds\n", (double)TIMEOUT / 1000);
+		fds.fd = STDIN_FILENO;
+		fds.events = POLLIN;
+		pollRet = poll(&fds, 1, TIMEOUT);
+		if (pollRet == -1 && errno == EINTR) {
+			continue;
+		}
+		if (pollRet == -1) {
+			perror(strerror(errno));
+			return -1;
+		}
+		if (pollRet == 0) {
+			printf("Time is out, sorry");
+		}
+		return readNumber(numberOfLines);
+	} while (0);
 }
