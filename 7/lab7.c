@@ -43,17 +43,20 @@ int main (int argc, char **argv) {
 	
 	numberOfLines = buildLinesTable(fileMap, fileMapSize, lineOffsets);
 
-	if ((i = readNumberWithTimeLimit(numberOfLines)) < 1) {
-		return 0; 
-	}
-	printLine(fileMap, fileMapSize, lineOffsets, i);
-	
-	while ((i = readNumber(numberOfLines)) != 0) {
-		if (i == -1) {
-			continue;
-		}
+	if ((i = readNumberWithTimeLimit(numberOfLines)) > 0) {
 		printLine(fileMap, fileMapSize, lineOffsets, i);
+	
+		while ((i = readNumber(numberOfLines)) != 0) {
+			if (i == -1) {
+				continue;
+			}
+			printLine(fileMap, fileMapSize, lineOffsets, i);
+		}
 	}
+	
+	munmap(fileMap, fileMapSize);
+	close(fileDescriptor);
+	return 0;
 }
 
 int buildLinesTable(char* fileMap, off_t fileMapSize, int *lineOffsets) {
