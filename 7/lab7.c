@@ -38,7 +38,10 @@ int main (int argc, char **argv) {
 	fileMap = (char*) mmap(0, fileMapSize, PROT_READ, MAP_SHARED, fileDescriptor, 0);
 	if (fileMap == NULL) {
 		perror(strerror(errno));
-		close(fileDescriptor);
+		if (close(fileDescriptor) == -1) {
+			perror(strerror(errno));
+			puts("Unable to close the file");
+		}	
 		exit(1);
 	}
 	
@@ -55,8 +58,14 @@ int main (int argc, char **argv) {
 		}
 	}
 	
-	munmap(fileMap, fileMapSize);
-	close(fileDescriptor);
+	if (munmap(fileMap, fileMapSize) == -1) {
+		perror(strerror(errno));
+		puts("Unable to unmap the file");
+	}
+	if (close(fileDescriptor) == -1) {
+		perror(strerror(errno));
+		puts("Unable to close the file");
+	}
 	return 0;
 }
 
