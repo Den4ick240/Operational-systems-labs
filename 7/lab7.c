@@ -38,6 +38,7 @@ int main (int argc, char **argv) {
 	fileMap = (char*) mmap(0, fileMapSize, PROT_READ, MAP_SHARED, fileDescriptor, 0);
 	if (fileMap == NULL) {
 		perror(strerror(errno));
+		close(fileDescriptor);
 		exit(1);
 	}
 	
