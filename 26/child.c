@@ -11,11 +11,21 @@ int main() {
 	static const int BUFF_SIZE = 8;
 	int readBytes;
 	char buffer[BUFF_SIZE];
-	while ((readBytes = read(0, buffer, BUFF_SIZE)) > 0) {
+	while ((readBytes = read(0, buffer, BUFF_SIZE)) != 0) {
 		char *s;
+		if (readBytes == -1) {
+			if (errno == EINTR) continue;
+			else break;
+		}
 		for (s = buffer; *s != 0; s++)
 			*s = toupper(*s);
-		write(1, buffer, readBytes);
+		if (write(1, buffer, readBytes) == -1) {
+			perror(strerror(errno));
+		}
 	}
-	return 0;
+	if (readBytes == -1) {
+	    perror(strerror(errno));
+	    exit(EXIT_FAILURE);
+	}
+	exit(EXIT_SUCCESS);
 }
